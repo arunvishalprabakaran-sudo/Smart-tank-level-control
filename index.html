@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Smart Tank Level Control</title>
+
+  <!-- Link to CSS -->
+  <link rel="stylesheet" href="levelcss.css">
+</head>
+<body>
+  <div class="card">
+    <h1>Smart Tank Level Control</h1>
+
+    <div class="tank-container">
+      <div class="water" id="waterLevel"></div>
+    </div>
+
+    <h2 id="level">Level: 0%</h2>
+
+    <div class="pump-section">
+      <img src="https://cdn-icons-png.flaticon.com/512/6068/6068613.png" alt="Pump" class="pump-img">
+      <p id="status">Pump Status: OFF</p>
+      <p id="modeStatus">Mode: AUTO</p>
+    </div>
+
+    <div class="buttons">
+      <button id="modeBtn" class="mode">Switch to MANUAL</button><br>
+      <button id="startBtn" class="start">Start Pump</button>
+      <button id="stopBtn" class="stop">Stop Pump</button>
+    </div>
+
+    <footer>
+      Developed by Arun Vishal | MIT – E&I
+    </footer>
+  </div>
+
+  <!-- Link to JS -->
+  <script src="jslevel.js"></script>
+</body>
+</html>
