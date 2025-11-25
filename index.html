@@ -1,41 +1,471 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Smart Tank Level Control</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Smart Tank — Mobile App</title>
 
-  <!-- Link to CSS -->
-  <link rel="stylesheet" href="levelcss.css">
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+<style>
+  :root{
+    --bg1:#031426; --bg2:#062036;
+    --card: rgba(255,255,255,0.04);
+    --accent:#4fd8ff; --ok:#22ff9b; --err:#ff4466;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;font-family:Inter, "Poppins", system-ui, Arial, sans-serif;
+    background: linear-gradient(180deg,var(--bg1),var(--bg2));
+    color:#eaf8ff;
+    -webkit-font-smoothing:antialiased;
+    -moz-osx-font-smoothing:grayscale;
+  }
+
+  /* Mobile-first container */
+  .app{
+    max-width:420px;margin:16px auto;padding:14px;display:flex;flex-direction:column;gap:12px;
+  }
+  .card{
+    background:var(--card);border-radius:14px;padding:12px;border:1px solid rgba(255,255,255,0.03);
+    box-shadow: 0 8px 28px rgba(0,0,0,0.5);
+  }
+
+  header{display:flex;align-items:center;gap:10px}
+  header h1{margin:0;font-size:18px}
+  header p{margin:0;font-size:12px;color:rgba(200,240,255,0.6)}
+
+  /* Tank + tube area */
+  .visual{display:flex;gap:12px;align-items:flex-end;justify-content:center}
+  .tank{
+    width:180px;height:260px;border-radius:12px;border:4px solid rgba(255,255,255,0.06);
+    background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+    box-shadow: inset 0 6px 18px rgba(0,0,0,0.45);
+    position:relative;overflow:hidden;transform: perspective(600px) rotateX(6deg);
+  }
+  .wave-top{position:absolute;top:0;left:0;width:100%;height:36px;background:
+    radial-gradient(60% 40% at 30% 20%, rgba(255,255,255,0.03), transparent 30%),
+    linear-gradient(180deg, rgba(255,255,255,0.02), transparent 60%);z-index:4;animation: floatWave 6s ease-in-out infinite}
+  @keyframes floatWave{0%{transform:translateY(-6px)}50%{transform:translateY(6px)}100%{transform:translateY(-6px)}}
+
+  .water{position:absolute;left:0;right:0;bottom:0;height:6%;background:linear-gradient(180deg,#2fe6ff,#00a6d4);transition:height 1.2s cubic-bezier(.2,.8,.2,1);box-shadow: inset 0 -24px 40px rgba(0,0,0,0.5);z-index:2}
+  .bubbles{position:absolute;left:6%;right:6%;bottom:6%;top:28%;pointer-events:none;overflow:hidden;z-index:3}
+
+  .tube{width:36px;height:220px;border-radius:10px;border:3px solid rgba(255,255,255,0.06);background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));position:relative;box-shadow: inset 0 6px 18px rgba(0,0,0,0.4)}
+  .tube .fill{position:absolute;left:0;right:0;bottom:0;height:6%;background:linear-gradient(180deg,#64f0ff,#00b0d9);transition:height 1.2s}
+  .tube .ticks{position:absolute;left:0;right:0;top:6px;height:100%;display:flex;flex-direction:column;justify-content:space-between;padding:10px 4px;color:rgba(255,255,255,0.12);font-size:11px}
+
+  /* info row */
+  .info{display:flex;justify-content:space-between;align-items:center;padding-top:8px}
+  .level-num{font-size:20px;font-weight:700}
+  .pill{padding:6px 10px;border-radius:999px;background:rgba(255,255,255,0.02);font-size:13px}
+
+  /* controls */
+  .controls{display:flex;gap:8px;flex-direction:column;margin-top:6px}
+  .btn-row{display:flex;gap:8px}
+  .neon-btn{flex:1;padding:12px;border-radius:12px;border:none;font-weight:800;font-size:13px;color:#051827;cursor:pointer;box-shadow:0 6px 20px rgba(0,0,0,0.6);transition:transform .12s,box-shadow .12s}
+  .neon-btn:active{transform:translateY(1px)}
+  .btn-on{background:linear-gradient(180deg,var(--ok),#12b36a);box-shadow:0 10px 30px rgba(34,255,155,0.12)}
+  .btn-off{background:linear-gradient(180deg,#ff9bb0,var(--err));box-shadow:0 10px 30px rgba(255,68,102,0.10)}
+
+  .small-row{display:flex;justify-content:space-between;align-items:center;margin-top:8px;gap:8px}
+  .small-row input{width:80px;padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:#dff4ff}
+
+  /* chart & log */
+  .chart{height:220px;border-radius:10px;padding:8px;margin-top:4px}
+  .log{max-height:140px;overflow:auto;padding:8px;border-radius:10px;margin-top:6px;background:rgba(255,255,255,0.01);font-size:13px}
+
+  footer{font-size:12px;color:rgba(255,255,255,0.45);text-align:right;margin-top:6px}
+
+  @media(min-width:700px){
+    .app{max-width:900px;margin:20px auto;display:grid;grid-template-columns:420px 1fr;gap:14px}
+    .card{padding:16px}
+    .chart{height:300px}
+  }
+</style>
 </head>
 <body>
+
+<div class="app">
+  <!-- LEFT: Visual + Controls -->
   <div class="card">
-    <h1>Smart Tank Level Control</h1>
+    <header>
+      <div>
+        <h1>Smart Tank — Mobile</h1>
+        <p>Auto logic enforced (95% off, 5% on). Mobile commands apply only if new after auto action.</p>
+      </div>
+    </header>
 
-    <div class="tank-container">
-      <div class="water" id="waterLevel"></div>
+    <div class="visual">
+      <div class="tank" id="mainTank">
+        <div class="wave-top"></div>
+        <div class="bubbles" id="bubbles"></div>
+        <div class="water" id="water"></div>
+      </div>
+
+      <div class="tube">
+        <div class="fill" id="tubeFill"></div>
+        <div class="ticks">
+          <div>100%</div><div>75%</div><div>50%</div><div>25%</div><div>0%</div>
+        </div>
+      </div>
     </div>
 
-    <h2 id="level">Level: 0%</h2>
-
-    <div class="pump-section">
-      <img src="https://cdn-icons-png.flaticon.com/512/6068/6068613.png" alt="Pump" class="pump-img">
-      <p id="status">Pump Status: OFF</p>
-      <p id="modeStatus">Mode: AUTO</p>
+    <div class="info">
+      <div class="level-num" id="levelText">0%</div>
+      <div class="pill" id="statusPill">Idle</div>
     </div>
 
-    <div class="buttons">
-      <button id="modeBtn" class="mode">Switch to MANUAL</button><br>
-      <button id="startBtn" class="start">Start Pump</button>
-      <button id="stopBtn" class="stop">Stop Pump</button>
+    <div class="controls">
+      <div class="btn-row">
+        <button id="startBtn" class="neon-btn btn-on">START PUMP</button>
+        <button id="stopBtn"  class="neon-btn btn-off">STOP PUMP</button>
+      </div>
+
+      <div class="small-row">
+        <div>
+          <label style="font-size:13px;color:#9fd6eb">Auto thresholds</label>
+          <div style="display:flex;gap:6px;margin-top:6px">
+            <input id="lowThresh" type="number" min="0" max="100" value="5"> <span style="align-self:center">Low %</span>
+            <input id="highThresh" type="number" min="0" max="100" value="95"> <span style="align-self:center">High %</span>
+          </div>
+        </div>
+
+        <div style="text-align:right">
+          <div style="font-size:13px;color:#9fd6eb">Pump LED</div>
+          <div id="pumpLed" style="width:16px;height:16px;border-radius:50%;background:var(--err);box-shadow:0 0 8px var(--err);margin-top:6px"></div>
+        </div>
+      </div>
     </div>
 
-    <footer>
-      Developed by Arun Vishal | MIT – E&I
-    </footer>
+    <footer>Developed by Arun Vishal | MIT – E&I</footer>
   </div>
 
-  <!-- Link to JS -->
-  <script src="jslevel.js"></script>
+  <!-- RIGHT: Chart + Logs -->
+  <div class="card">
+    <div class="chart">
+      <canvas id="historyChart" style="width:100%;height:100%"></canvas>
+    </div>
+
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
+      <div style="font-size:13px;color:#9fd6eb">Activity Log</div>
+      <div id="lastUpdated" style="font-size:12px;color:rgba(255,255,255,0.45)">—</div>
+    </div>
+
+    <div class="log" id="logBox"></div>
+  </div>
+</div>
+
+<!-- ================== SCRIPT ================== -->
+<script type="module">
+/* ================== CONFIG ================== */
+/* ThingSpeak keys (from your code) */
+const channelID = 3150868;
+const readKey   = "S8MLK8YR293S0IC5";
+const writeKey  = "S72I63Y8XIPYKUN5";
+
+/* Firebase modular imports & config (user-provided) */
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
+import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-database.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCq1J11i1Y033_c0u6llqct7N5oXSXdjV8",
+  authDomain: "iot-level-control.firebaseapp.com",
+  projectId: "iot-level-control",
+  storageBucket: "iot-level-control.appspot.com",
+  messagingSenderId: "646906608422",
+  appId: "1:646906608422:web:5dbbf03a2984bf025f1fe7",
+  measurementId: "G-L9854W84MG",
+  databaseURL: "https://iot-level-control-default-rtdb.firebaseio.com"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+
+// Firebase refs
+const pumpStateRef   = ref(db, "pump/state");      // 0 or 1
+const pumpMobileRef  = ref(db, "pump/mobileCmd");  // object {id,value,ts}
+const pumpAutoRef    = ref(db, "pump/autoState");  // 0 or 1
+const pumpLastRef    = ref(db, "pump/lastChange"); // timestamp
+const tankLevelRef   = ref(db, "tank/level");      // numeric level
+const tankUpdatedRef = ref(db, "tank/updated");    // timestamp
+
+/* ================== UI ELEMENTS ================== */
+const waterEl = document.getElementById('water');
+const tubeEl = document.getElementById('tubeFill');
+const levelText = document.getElementById('levelText');
+const statusPill = document.getElementById('statusPill');
+const startBtn = document.getElementById('startBtn');
+const stopBtn = document.getElementById('stopBtn');
+const pumpLed = document.getElementById('pumpLed');
+const lowThreshInput = document.getElementById('lowThresh');
+const highThreshInput = document.getElementById('highThresh');
+const logBox = document.getElementById('logBox');
+const lastUpdatedEl = document.getElementById('lastUpdated');
+const bubblesContainer = document.getElementById('bubbles');
+
+/* ================== APP STATE ================== */
+let pumpState = 0;          // 0/1 (from Firebase pump/state)
+let pumpAutoState = null;   // 0/1 (from Firebase pump/autoState)
+let currentLevel = 0;
+let mobileCmdCounter = 0;   // local counter to seed mobile command IDs
+const writeCooldownMs = 17000;
+let lastWriteTime = 0;
+const historyPoints = 30;
+
+/* ================== AUDIO (WebAudio) ================== */
+const AudioCtx = window.AudioContext || window.webkitAudioContext;
+const audioCtx = AudioCtx ? new AudioCtx() : null;
+function playTone(freq=440, dur=0.12, type='sine', gainVal=0.14){
+  if(!audioCtx) return;
+  const now = audioCtx.currentTime;
+  const o = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  o.type = type; o.frequency.setValueAtTime(freq, now);
+  g.gain.setValueAtTime(gainVal, now);
+  o.connect(g); g.connect(audioCtx.destination);
+  o.start(now); o.stop(now + dur);
+}
+function uiClick(){ playTone(900,0.05,'sine',0.05) }
+function pumpOnSound(){ playTone(760,0.12,'sine',0.14); playTone(980,0.06,'sine',0.06) }
+function pumpOffSound(){ playTone(420,0.12,'sine',0.12) }
+function alarmHigh(){ playTone(1200,0.38,'sawtooth',0.22); playTone(1000,0.18,'sine',0.14) }
+function alarmLow(){ playTone(380,0.38,'sawtooth',0.22); playTone(520,0.18,'sine',0.14) }
+
+document.addEventListener('click', ()=>{ if(audioCtx && audioCtx.state==='suspended') audioCtx.resume(); }, {once:true});
+
+/* ================== BUBBLES ================== */
+function spawnBubble(){
+  const b = document.createElement('div');
+  b.className = 'bubble';
+  const size = 6 + Math.random()*18;
+  b.style.width = size + 'px'; b.style.height = size + 'px';
+  b.style.left = (8 + Math.random()*84) + '%';
+  b.style.bottom = (6 + Math.random()*6) + '%';
+  b.style.background = 'rgba(255,255,255,' + (0.08 + Math.random()*0.12) + ')';
+  b.style.borderRadius = '50%';
+  const dur = 5 + Math.random()*6;
+  b.style.animation = bubbleRise ${dur}s linear forwards;
+  bubblesContainer.appendChild(b);
+  setTimeout(()=>b.remove(), (dur+0.5)*1000);
+}
+setInterval(()=>{ const n = 1 + Math.floor(Math.random()*2); for(let i=0;i<n;i++) setTimeout(spawnBubble, i*180 + Math.random()*200) }, 900);
+const style = document.createElement('style');
+style.textContent = @keyframes bubbleRise { to { transform: translateY(-260px) scale(1); opacity:0 } };
+document.head.appendChild(style);
+
+/* ================== CHART ================== */
+const ctx = document.getElementById('historyChart').getContext('2d');
+const chartData = { labels: Array(historyPoints).fill(''), datasets:[{label:'Water Level',data:Array(historyPoints).fill(null),tension:0.3,borderColor:'rgba(79,216,255,0.95)',backgroundColor:'rgba(79,216,255,0.08)',pointRadius:2} ] };
+const historyChart = new Chart(ctx,{type:'line',data:chartData,options:{animation:false,scales:{x:{display:false},y:{min:0,max:100,ticks:{color:'#9fd6eb'}}},plugins:{legend:{display:false}}}});
+
+/* ================== LOG helper ================== */
+function addLog(text){
+  const t = new Date().toLocaleString();
+  const p = document.createElement('div');
+  p.textContent = ${t} — ${text};
+  p.style.padding = '6px 0';
+  p.style.borderBottom = '1px solid rgba(255,255,255,0.02)';
+  logBox.prepend(p);
+  while(logBox.childNodes.length > 120) logBox.removeChild(logBox.lastChild);
+}
+
+/* ================== FIREBASE LISTENERS ================== */
+// pump/state (0 or 1) updates UI
+onValue(pumpStateRef, (snap) => {
+  const v = snap.val();
+  if (v === 0 || v === 1) {
+    pumpState = v;
+    updatePumpUI(pumpState, true);
+    addLog('Firebase: pump/state = ' + v);
+    statusPill.textContent = (pumpAutoState !== null && pumpAutoState === pumpState) ? (pumpState ? 'AUTO: ON' : 'AUTO: OFF') : (pumpState ? 'Pump: ON' : 'Pump: OFF');
+  }
+});
+
+// pump/autoState (0 or 1)
+onValue(pumpAutoRef, (snap) => {
+  const v = snap.val();
+  if (v === 0 || v === 1) {
+    pumpAutoState = v;
+    addLog('Firebase: pump/autoState = ' + v);
+  }
+});
+
+// pump/mobileCmd changes (for visibility)
+onValue(pumpMobileRef, (snap) => {
+  const v = snap.val();
+  if (v && typeof v === 'object') {
+    addLog('Firebase: mobileCmd -> id:'+v.id+' val:'+v.value+' ts:'+v.ts);
+  }
+});
+
+/* ================== THINGSPEAK READ/HISTORY ================== */
+async function fetchHistory(){
+  try{
+    const url = https://api.thingspeak.com/channels/${channelID}/feeds.json?results=${historyPoints}&api_key=${readKey};
+    const r = await fetch(url);
+    if(!r.ok) throw new Error('history fetch failed');
+    const j = await r.json();
+    const feeds = j.feeds || [];
+    const labels = [], data = [];
+    for(const f of feeds){
+      if(f.field1 != null){ labels.push(new Date(f.created_at).toLocaleTimeString()); data.push(parseFloat(f.field1)); }
+    }
+    while(data.length < historyPoints){ data.unshift(null); labels.unshift('') }
+    historyChart.data.labels = labels;
+    historyChart.data.datasets[0].data = data;
+    historyChart.update();
+    addLog('History loaded (' + data.filter(d=>d!==null).length + ' pts)');
+  }catch(e){
+    console.warn(e); addLog('History fetch error');
+  }
+}
+
+async function fetchLatest(){
+  try{
+    const url = https://api.thingspeak.com/channels/${channelID}/feeds/last.json?api_key=${readKey};
+    const r = await fetch(url);
+    if(!r.ok) throw new Error('latest fetch failed');
+    const d = await r.json();
+    const lvl = parseFloat(d.field1 || 0);
+    const created = d.created_at ? new Date(d.created_at) : new Date();
+    lastUpdatedEl.textContent = created.toLocaleString();
+
+    // Update UI level
+    currentLevel = Number.isFinite(lvl) ? Math.max(0, Math.min(100, lvl)) : 0;
+    updateLevelUI(currentLevel);
+
+    // Write level into Firebase so ESP and app share same reading
+    try {
+      await set(tankLevelRef, currentLevel);
+    } catch(e) {
+      console.warn('Firebase write tank level failed', e);
+    }
+    try { await set(tankUpdatedRef, Date.now()); } catch(e){}
+
+    addLog('Latest loaded from ThingSpeak: ' + currentLevel.toFixed(1) + '%');
+
+    // We do NOT force pump/state here; ESP should implement the FINAL auto logic
+    return true;
+  }catch(e){
+    console.warn(e); addLog('Latest fetch error');
+    return false;
+  }
+}
+
+/* ================== WRITE to THINGSPEAK (field2) ================== */
+function canWriteNow(){ return (Date.now() - lastWriteTime) > writeCooldownMs; }
+async function sendCommand(value){
+  if(!canWriteNow()){
+    addLog('Write skipped: cooldown');
+    statusPill.textContent = 'Wait before next write';
+    return false;
+  }
+  lastWriteTime = Date.now();
+  const url = https://api.thingspeak.com/update?api_key=${writeKey}&field2=${value};
+  addLog('Sending command to ThingSpeak: ' + value);
+  statusPill.textContent = 'Sending...';
+  try{
+    const r = await fetch(url);
+    const txt = await r.text();
+    if(txt && txt !== '0'){
+      addLog('ThingSpeak command sent (id '+txt+')');
+      statusPill.textContent = 'Command sent to TS';
+      return true;
+    } else {
+      addLog('ThingSpeak command rejected');
+      statusPill.textContent = 'TS Send failed';
+      return false;
+    }
+  }catch(e){
+    console.warn(e); addLog('ThingSpeak Send error'); statusPill.textContent = 'TS Send error'; return false;
+  }
+}
+
+/* ================== MOBILE COMMAND (Firebase + ThingSpeak) ================== */
+async function sendMobileCommand(value) {
+  // value should be 0 or 1
+  mobileCmdCounter++;
+  const cmd = { id: mobileCmdCounter, value: value, ts: Date.now() };
+
+  try {
+    // 1) write mobile command to Firebase (so ESP / other clients see it instantly)
+    await set(pumpMobileRef, cmd);
+    await set(pumpLastRef, Date.now());
+    addLog('Firebase mobileCmd written: ' + JSON.stringify(cmd));
+
+    // 2) send to ThingSpeak too (optional: keeps TS in sync with mobile intent)
+    await sendCommand(value);
+
+    // optimistic UI: we don't overwrite pump/state because ESP decides acceptance per auto rules
+    statusPill.textContent = 'Mobile command sent';
+    return true;
+  } catch (e) {
+    console.warn(e);
+    addLog('mobileCmd write error');
+    statusPill.textContent = 'Send error';
+    return false;
+  }
+}
+
+/* ================== UI helpers ================== */
+function updateLevelUI(val){
+  levelText.textContent = val.toFixed(1) + '%';
+  waterEl.style.height = Math.max(0,Math.min(100,val)) + '%';
+  tubeEl.style.height = Math.max(0,Math.min(100,val)) + '%';
+
+  // push to chart
+  historyChart.data.datasets[0].data.push(val);
+  historyChart.data.labels.push(new Date().toLocaleTimeString());
+  if(historyChart.data.datasets[0].data.length > historyPoints){
+    historyChart.data.datasets[0].data.shift();
+    historyChart.data.labels.shift();
+  }
+  historyChart.update('none');
+}
+
+function updatePumpUI(val, playSound=true){
+  if(val === 1){
+    pumpLed.style.background = 'var(--ok)';
+    pumpLed.style.boxShadow = '0 0 12px rgba(34,255,155,0.16)';
+    if(playSound) pumpOnSound();
+  } else {
+    pumpLed.style.background = 'var(--err)';
+    pumpLed.style.boxShadow = '0 0 10px rgba(255,68,102,0.10)';
+    if(playSound) pumpOffSound();
+  }
+}
+
+/* ================== BUTTON HANDLERS ================== */
+startBtn.addEventListener('click', async () => {
+  uiClick();
+  addLog('Mobile: START pressed');
+  await sendMobileCommand(1);
+});
+
+stopBtn.addEventListener('click', async () => {
+  uiClick();
+  addLog('Mobile: STOP pressed');
+  await sendMobileCommand(0);
+});
+
+/* ================== INITIAL LOAD & POLLING ================== */
+async function fullInit(){
+  addLog('App started; loading history & latest feed');
+  await fetchHistory();
+  await fetchLatest();
+  // Firebase listeners already active
+}
+fullInit();
+
+// Poll latest ThingSpeak every ~17s (Thingspeak friendly)
+setInterval(async ()=>{ await fetchLatest(); }, 17000);
+
+/* ================== tiny startup log ================== */
+addLog('Ready. Firebase + ThingSpeak integrated (auto logic expected to run on ESP).');
+
+</script>
 </body>
 </html>
